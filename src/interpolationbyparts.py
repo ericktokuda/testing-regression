@@ -21,6 +21,7 @@ import logging
 import matplotlib.pyplot as plt
 
 
+
 def load_data(fullcsv):
     rawdata0 = pd.read_csv(fullcsv)
 
@@ -46,19 +47,16 @@ def get_traintest_data(ndata, trainratio, outdir='/tmp'):
 
 ##########################################################
 def compute_idw(knownX, knownY, unknownX, eqfactor):
-    #_knownX = knownX.copy()
-    #_knownX[[0,1]] = _knownX[[0,1]] * eqfactor
-    #_unknownX = unknownX.copy()
-    #_unknownX[[0,1]] = un_knownX[[0,1]] * eqfactor
-    #dist = cdist(_knownX, [_unknownX])
-    #weights = 1.0 / dist
-    #weights /= weights.sum(axis=0)
-    #zi = np.dot(weights.T, knownY)
-    #input(zi)
-    knownX = 9
+    _knownX = knownX.copy()
+    _knownX[[0,1]] = _knownX[[0,1]] * eqfactor
+    _unknownX = unknownX.copy()
+    _unknownX[[0,1]] = _unknownX[[0,1]] * eqfactor
+    dist = cdist(_knownX, [_unknownX])
+    weights = 1.0 / dist
+    weights /= weights.sum(axis=0)
+    zi = np.dot(weights.T, knownY)
+    return zi
 
-    return 100
-    #return zi
 
 ##########################################################
 def main():
@@ -81,6 +79,8 @@ def main():
     scaledddy = rady * eqfactor
     scaledddays = raddays / 326.0
     scaleddtime = 1
+    MINPOINTS = 4
+    BUFFERSZ = 10
 
     rawdata, mins, maxs = load_data(fullcsv)
     traindata, testdata = get_traintest_data(rawdata, trainratio)
@@ -91,40 +91,44 @@ def main():
     #x = pd.DataFrame(mygrid)
 
     if not os.path.exists(gridfile):
-        mygrid = list(product(*[np.arange(i, j, k)[:-1] for i,j,k in zip(mins, maxs, steps)]))
+        mygrid = np.array(list(product(*[np.arange(i, j, k)[:-1] for i,j,k in zip(mins, maxs, steps)])))
         np.save(gridfile, np.array(mygrid))
     else:
         mygrid = np.load(gridfile)
     print('Grid loaded')
 
+
+    mygrid = (pd.DataFrame(mygrid, columns=['dx','dy','day','time']))
+
     acc = 0
-    gridid = 0
+    bufferedpoints = {}
+    bufferedvalues = {}
 
-    for p in mygrid:
-        filtered = traindata.copy()
-        filtered = filtered[(filtered['dx'] < p[0] + radx) & (filtered['dx'] > p[0] - radx)]
-        filtered = filtered[(filtered['dy'] < p[1] + rady) & (filtered['dy'] > p[1] - rady)]
-        filtered = filtered[filtered['ddays'] == p[2]]
-        filtered = filtered[(filtered['time'] < p[3] + radtime) & (filtered['time'] > p[3] - radtime)]
+    valuesfile = os.path.join(outdir, 'values.csv')
 
-        sz = len(filtered.index)
-        if sz < 4: continue
+    for idx, p in mygrid.iterrows():
+        filtered = traindata[(traindata['dx'] < p['dx'] + radx) & (traindata['dx'] > p['dx'] - radx)].copy()
+        filtered = filtered[(filtered['dy'] < p['dy'] + rady) & (filtered['dy'] > p['dy'] - rady)]
+        filtered = filtered[filtered['ddays'] == p['day']]
+        filtered = filtered[(filtered['time'] < p['time'] + radtime) & (filtered['time'] > p['time'] - radtime)]
 
+        if len(filtered.index) < MINPOINTS: continue
         acc += 1        
 
         t0 = time.time()
-        #skpoints = filtered[['dx', 'dy', 'ddays', 'time']]
-        skpoints = filtered[['dx', 'dy', 'time']]
+        skpoints = filtered[['dx', 'dy', 'time']].as_matrix()
 
-        filenamesuf = os.path.join(outdir, str(gridid))
-        print(skpoints)
-        compute_idw(skpoints.as_matrix(), filtered['people'], p[1:], eqfactor)
-        input(skpoints)
-        filtered[['id', 'dx', 'dy', 'ddays', 'dow', 'time', 'people']]. \
-            to_csv(filenamesuf + '.csv')
-        input('first iteration')
-        gridid += 1
-
+        filenamesuf = os.path.join(outdir, str(idx))
+        interpolated = compute_idw(skpoints, filtered['people'], p[1:], eqfactor)
+        bufferedvalues[idx] = int(interpolated)
+        bufferedpoints[idx] = (filtered['id']).as_matrix()
+        
+        if acc % BUFFERSZ == BUFFERSZ-1:
+            pickle.dump(bufferedvalues, open('{}_values{}.pkl'.format(filenamesuf, acc//BUFFERSZ), "wb"))
+            pickle.dump(bufferedpoints, open('{}_points{}.pkl'.format(filenamesuf, acc//BUFFERSZ), "wb"))
+            bufferedvalues = {}
+            bufferedpoints = {}
+            print(acc)
 
 if __name__ == "__main__":
     main()
