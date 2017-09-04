@@ -61,7 +61,7 @@ def compute_idw(knownX, knownY, unknownX, eqfactor):
 ##########################################################
 def main():
     fullcsv = 'data/20170709-pedestrians_sample.csv'
-    outdir = '/tmp/'
+    outdir = '/home/grace/temp/20170903-pedsinterp/'
     trainratio = 0.8
     radx = 1000.0
     rady = 1000.0
@@ -82,6 +82,7 @@ def main():
     MINPOINTS = 4
     BUFFERSZ = 10
 
+    if not os.path.exists(outdir): os.makedirs(outdir)
     rawdata, mins, maxs = load_data(fullcsv)
     traindata, testdata = get_traintest_data(rawdata, trainratio)
 
@@ -106,7 +107,13 @@ def main():
 
     valuesfile = os.path.join(outdir, 'values.csv')
 
-    for idx, p in mygrid.iterrows():
+    indices = mygrid.index
+    nindices = len(indices)
+    maxidx = nindices // 2
+
+    for jj in range(maxidx):
+        idx = indices[jj]
+        p = mygrid.iloc[idx]
         filtered = traindata[(traindata['dx'] < p['dx'] + radx) & (traindata['dx'] > p['dx'] - radx)].copy()
         filtered = filtered[(filtered['dy'] < p['dy'] + rady) & (filtered['dy'] > p['dy'] - rady)]
         filtered = filtered[filtered['ddays'] == p['day']]
@@ -118,14 +125,14 @@ def main():
         t0 = time.time()
         skpoints = filtered[['dx', 'dy', 'time']].as_matrix()
 
-        filenamesuf = os.path.join(outdir, str(idx))
+        filenamesuf = os.path.join(outdir, str(acc//BUFFERSZ))
         interpolated = compute_idw(skpoints, filtered['people'], p[1:], eqfactor)
         bufferedvalues[idx] = int(interpolated)
         bufferedpoints[idx] = (filtered['id']).as_matrix()
         
         if acc % BUFFERSZ == BUFFERSZ-1:
-            pickle.dump(bufferedvalues, open('{}_values{}.pkl'.format(filenamesuf, acc//BUFFERSZ), "wb"))
-            pickle.dump(bufferedpoints, open('{}_points{}.pkl'.format(filenamesuf, acc//BUFFERSZ), "wb"))
+            pickle.dump(bufferedvalues, open('{}_values.pkl'.format(filenamesuf), "wb"))
+            pickle.dump(bufferedpoints, open('{}_points.pkl'.format(filenamesuf), "wb"))
             bufferedvalues = {}
             bufferedpoints = {}
             print(acc)
