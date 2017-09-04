@@ -17,6 +17,7 @@ import os.path
 import pickle
 from scipy.spatial.distance import cdist
 import logging
+import argparse
 
 import matplotlib.pyplot as plt
 
@@ -60,6 +61,11 @@ def compute_idw(knownX, knownY, unknownX, eqfactor):
 
 ##########################################################
 def main():
+    parser = argparse.ArgumentParser(description='Interpolate by parts')
+    parser.add_argument('startratio')
+    parser.add_argument('endratio')
+    args = parser.parse_args()
+
     fullcsv = 'data/20170709-pedestrians_sample.csv'
     outdir = '/home/grace/temp/20170903-pedsinterp/'
     trainratio = 0.8
@@ -105,13 +111,20 @@ def main():
     bufferedpoints = {}
     bufferedvalues = {}
 
-    valuesfile = os.path.join(outdir, 'values.csv')
-
     indices = mygrid.index
     nindices = len(indices)
-    maxidx = nindices // 2
+    startidx = int(nindices * float(args.startratio))
+    endidx = int(nindices * float(args.endratio))
 
-    for jj in range(maxidx):
+    if startidx < endidx:
+        deltaidx = 1
+        endidx -= 1
+    else:
+        deltaidx = -1
+        startidx -= 1
+
+
+    for jj in range(startidx, endidx, deltaidx):
         idx = indices[jj]
         p = mygrid.iloc[idx]
         filtered = traindata[(traindata['dx'] < p['dx'] + radx) & (traindata['dx'] > p['dx'] - radx)].copy()
@@ -125,7 +138,7 @@ def main():
         t0 = time.time()
         skpoints = filtered[['dx', 'dy', 'time']].as_matrix()
 
-        filenamesuf = os.path.join(outdir, str(acc//BUFFERSZ))
+        filenamesuf = os.path.join(outdir, args.startratio + '_' + str(acc//BUFFERSZ))
         interpolated = compute_idw(skpoints, filtered['people'], p[1:], eqfactor)
         bufferedvalues[idx] = int(interpolated)
         bufferedpoints[idx] = (filtered['id']).as_matrix()
