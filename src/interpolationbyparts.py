@@ -140,7 +140,7 @@ def main():
 
         filenamesuf = os.path.join(outdir, args.startratio + '_' + str(acc//BUFFERSZ))
         interpolated = compute_idw(skpoints, filtered['people'], p[1:], eqfactor)
-        bufferedvalues[idx] = int(interpolated)
+        bufferedvalues[idx] = interpolated
         bufferedpoints[idx] = (filtered['id']).as_matrix()
         
         if acc % BUFFERSZ == BUFFERSZ-1:
